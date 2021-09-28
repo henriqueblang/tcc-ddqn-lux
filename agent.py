@@ -78,10 +78,7 @@ def get_inputs(game_state):
 
 
 def get_direction(action):
-    if action < 5:
-        return None
-    
-    return "csnwe"[action]
+    return "csnwe"[action] if action < 5 else None 
 
 
 def is_unit_action_valid(unit, action):
@@ -107,7 +104,7 @@ def is_unit_action_valid(unit, action):
             to_y -= 1
 
         # Out of bond
-        if to_x < 0 or to_x > width or to_y < 0 or to_y > height:
+        if to_x < 0 or to_x >= width or to_y < 0 or to_y >= height:
             return False
 
         to_cell = game_state.map.get_cell(to_x, to_y)
@@ -127,6 +124,7 @@ def is_unit_action_valid(unit, action):
     elif action == 5:
         if not unit.can_build(game_state.map):
             return False
+    else: return False
     '''elif action == pillage:
         to_cell = get_cell(to_x, to_y)
 
@@ -156,20 +154,33 @@ def is_citytile_action_valid(city_tile, action):
 
         if owned_units >= owned_city_tiles:
             return False
+    else: return False
         
     return True
 
 
 def get_best_unit_valid_action(unit, options, i=1):
+    if i == len(options):
+        return -1
+    
     option = np.argsort(options)[-i]
     
-    return option if is_unit_action_valid(unit, option) or i == len(options) - 1 else get_best_unit_valid_action(unit, options, i + 1)
+    if is_unit_action_valid(unit, option):
+        return option
+    
+    return get_best_unit_valid_action(unit, options, i + 1)
 
 
 def get_best_city_tile_valid_action(city_tile, options, i=1):
+    if i == len(options):
+        return -1
+    
     option = np.argsort(options)[-i]
     
-    return option if is_citytile_action_valid(city_tile, option) or i == len(options) - 1 else get_best_city_tile_valid_action(city_tile, options, i + 1)
+    if is_citytile_action_valid(city_tile, option):
+        return option
+    
+    return get_best_city_tile_valid_action(city_tile, options, i + 1)
 
 
 def get_model(s):
@@ -203,7 +214,7 @@ def get_prediction_actions(y, player):
         best_option = get_best_unit_valid_action(unit, options)
         best_options[unit_y, unit_x] = best_option
 
-        if best_option < 5:
+        if -1 < best_option < 5:
             actions.append(unit.move(get_direction(best_option)))
         elif best_option == 5:
             actions.append(unit.build_city())
@@ -215,7 +226,7 @@ def get_prediction_actions(y, player):
             options = y[city_tile_y][city_tile_x]
             
             best_option = get_best_city_tile_valid_action(city_tile, options)
-            best_options[unit_y, unit_x] = best_option
+            best_options[city_tile_y, city_tile_x] = best_option
         
             if best_option == 6:
                 actions.append(city_tile.research())
