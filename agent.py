@@ -81,7 +81,7 @@ def get_direction(action):
     return "csnwe"[action] if action < 5 else None 
 
 
-def is_unit_action_valid(unit, action):
+def is_unit_action_valid(unit, action, player, opponent):
     height, width = game_state.map.width, game_state.map.height
     
     to_x = unit.pos.x
@@ -112,13 +112,13 @@ def is_unit_action_valid(unit, action):
 
         # Not citytile and cell already has unit
         if to_citytile is None:
-            has_player_unit = to_cell.has_player_unit(game_state.players[0])
-            has_opponent_unit = to_cell.has_player_unit(game_state.players[1])
+            has_player_unit = to_cell.has_player_unit(player)
+            has_opponent_unit = to_cell.has_player_unit(opponent)
             
             if has_player_unit or has_opponent_unit:
                 return False
         # Opponent citytile
-        elif to_citytile.team != 0:
+        elif to_citytile.team == opponent.team:
             return False
     #elif action == build_city:
     elif action == 5:
@@ -135,7 +135,7 @@ def is_unit_action_valid(unit, action):
     return True
 
 
-def is_citytile_action_valid(city_tile, action):
+def is_city_tile_action_valid(city_tile, action, player):
     if not city_tile.can_act():
         return False
     
@@ -144,8 +144,6 @@ def is_citytile_action_valid(city_tile, action):
         pass
     #elif action == build_worker or action == build_cart:
     elif action == 7:
-        player = game_state.players[0]
-        
         owned_units = len(player.units)
         owned_city_tiles = 0
         
@@ -159,28 +157,28 @@ def is_citytile_action_valid(city_tile, action):
     return True
 
 
-def get_best_unit_valid_action(unit, options, i=1):
+def get_best_unit_valid_action(unit, options, player, opponent, i=1):
     if i == len(options):
         return -1
     
     option = np.argsort(options)[-i]
     
-    if is_unit_action_valid(unit, option):
+    if is_unit_action_valid(unit, option, player, opponent):
         return option
     
-    return get_best_unit_valid_action(unit, options, i + 1)
+    return get_best_unit_valid_action(unit, options, player, opponent, i + 1)
 
 
-def get_best_city_tile_valid_action(city_tile, options, i=1):
+def get_best_city_tile_valid_action(city_tile, options, player, i=1):
     if i == len(options):
         return -1
     
     option = np.argsort(options)[-i]
     
-    if is_citytile_action_valid(city_tile, option):
+    if is_city_tile_action_valid(city_tile, option, player):
         return option
     
-    return get_best_city_tile_valid_action(city_tile, options, i + 1)
+    return get_best_city_tile_valid_action(city_tile, options, player, i + 1)
 
 
 def get_model(s):
@@ -202,7 +200,7 @@ def get_model(s):
     return model
 
 
-def get_prediction_actions(y, player):
+def get_prediction_actions(y, player, opponent):
     actions = []
     best_options = np.zeros((game_state.map.width, game_state.map.height), dtype=int)
 
@@ -211,7 +209,7 @@ def get_prediction_actions(y, player):
 
         options = y[unit_y][unit_x]
         
-        best_option = get_best_unit_valid_action(unit, options)
+        best_option = get_best_unit_valid_action(unit, options, player, opponent)
         best_options[unit_y, unit_x] = best_option
 
         if -1 < best_option < 5:
@@ -225,7 +223,7 @@ def get_prediction_actions(y, player):
             
             options = y[city_tile_y][city_tile_x]
             
-            best_option = get_best_city_tile_valid_action(city_tile, options)
+            best_option = get_best_city_tile_valid_action(city_tile, options, player)
             best_options[city_tile_y, city_tile_x] = best_option
         
             if best_option == 6:
@@ -234,6 +232,7 @@ def get_prediction_actions(y, player):
                 actions.append(city_tile.build_worker())
     
     return actions, best_options
+
 
 def agent(observation, configuration):
     global game_state,epsilon,model
@@ -268,5 +267,5 @@ def agent(observation, configuration):
     # Get Prediction of actions
     x = get_inputs(game_state)
     y = model.predict(np.asarray([x]))[0]
-    actions,_ = get_prediction_actions(y,player)
+    actions,_ = get_prediction_actions(y, player, opponent)
     return actions
