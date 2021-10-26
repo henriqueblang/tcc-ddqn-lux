@@ -115,8 +115,29 @@ def is_unit_action_valid(unit, action, player, opponent):
             has_player_unit = to_cell.has_player_unit(player)
             has_opponent_unit = to_cell.has_player_unit(opponent)
             
+            print(f"Trying to move unit {unit.id} to: ({to_x},{to_y}), direction: {direction}")
+            
+            for unit_tmp in player.units:
+                unit_y, unit_x = unit_tmp.pos.y, unit_tmp.pos.x
+                
+                if unit_y == to_y and unit_x == to_x:
+                    print(f"Friendly unit at topos: {unit_tmp.id}")
+                    
+                    break
+                    
+            for unit_tmp in opponent.units:
+                unit_y, unit_x = unit_tmp.pos.y, unit_tmp.pos.x
+                
+                if unit_y == to_y and unit_x == to_x:
+                    print(f"Foe unit at topos: {unit_tmp.id}")
+                    
+                    break
+            
             if has_player_unit or has_opponent_unit:
+                print("Not possible")
                 return False
+            else:
+                print("Possible...")
         # Opponent citytile
         elif to_citytile.team == opponent.team:
             return False
@@ -200,14 +221,14 @@ def get_model(s):
     return model
 
 
-def get_prediction_actions(y, player, opponent):
+def get_prediction_actions(y_A, y_B, player, opponent):
     actions = []
     best_options = np.zeros((game_state.map.width, game_state.map.height), dtype=int)
 
     for unit in player.units:
         unit_y, unit_x = unit.pos.y, unit.pos.x
 
-        options = y[unit_y][unit_x]
+        options = y_A[unit_y][unit_x] + y_B[unit_y][unit_x]
         
         best_option = get_best_unit_valid_action(unit, options, player, opponent)
         best_options[unit_y, unit_x] = best_option
@@ -221,7 +242,7 @@ def get_prediction_actions(y, player, opponent):
         for city_tile in city.citytiles:
             city_tile_y, city_tile_x = city_tile.pos.y, city_tile.pos.x
             
-            options = y[city_tile_y][city_tile_x]
+            options = y_A[city_tile_y][city_tile_x] + y_B[city_tile_y][city_tile_x]
             
             best_option = get_best_city_tile_valid_action(city_tile, options, player)
             best_options[city_tile_y, city_tile_x] = best_option
@@ -235,7 +256,7 @@ def get_prediction_actions(y, player, opponent):
 
 
 def agent(observation, configuration):
-    global game_state,epsilon,model
+    global game_state, epsilon, model_A, model_B
     
     ### Do not edit ###
     if observation["step"] == 0:
@@ -244,10 +265,12 @@ def agent(observation, configuration):
         game_state._update(observation["updates"][2:])
         game_state.id = observation.player
         print("Creating model..")
-        model =get_model(game_state.map.width)
+        model_A = get_model(game_state.map.width)
+        model_B = get_model(game_state.map.width)
         print("Load model weight..")
         try:
-            model.load_weights(f'model_{game_state.map.width}.h5', by_name=True, skip_mismatch=True)
+            model_A.load_weights(f'model_A_{game_state.map.width}.h5', by_name=True, skip_mismatch=True)
+            model_B.load_weights(f'model_B_{game_state.map.width}.h5', by_name=True, skip_mismatch=True)
         except Exception as e:
             print('Error in model load')
             print(e)
@@ -266,6 +289,11 @@ def agent(observation, configuration):
 
     # Get Prediction of actions
     x = get_inputs(game_state)
-    y = model.predict(np.asarray([x]))[0]
-    actions,_ = get_prediction_actions(y, player, opponent)
+    y_A = model_A.predict(np.asarray([x]))[0]
+    y_B = model_B.predict(np.asarray([x]))[0]
+    
+    print(f"Step: {observation['step']}")
+    
+    actions, _ = get_prediction_actions(y_A, y_B, player, opponent)
+    
     return actions
