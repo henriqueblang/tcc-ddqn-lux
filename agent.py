@@ -78,30 +78,34 @@ def get_inputs(game_state):
 
 
 def get_direction(action):
-    return "csnwe"[action] if action < 5 else None 
+    return "csnwe"[action] if action < 5 else None
 
 
-def is_unit_action_valid(unit, action, player, opponent):
-    height, width = game_state.map.width, game_state.map.height
-    
+def get_unit_future_position(unit, direction):
     to_x = unit.pos.x
     to_y = unit.pos.y
+
+    if direction == "e":
+        to_x += 1
+    elif direction == "s":
+        to_y += 1
+    elif direction == "w":
+        to_x -= 1
+    elif direction == "n":
+        to_y -= 1
+        
+    return to_x, to_y
+
+
+def is_unit_action_valid(unit, option, actions, player, opponent):
+    height, width = game_state.map.width, game_state.map.height
     
     if not unit.can_act():
         return False
     
-    # if action == move:
-    if action < 5:
-        direction = get_direction(action)
-
-        if direction == "e":
-            to_x += 1
-        elif direction == "s":
-            to_y += 1
-        elif direction == "w":
-            to_x -= 1
-        elif direction == "n":
-            to_y -= 1
+    # if option == move:
+    if option < 5:
+        to_x, to_y = get_unit_future_position(unit, get_direction(option))
 
         # Out of bond
         if to_x < 0 or to_x >= width or to_y < 0 or to_y >= height:
@@ -115,38 +119,41 @@ def is_unit_action_valid(unit, action, player, opponent):
             has_player_unit = to_cell.has_player_unit(player)
             has_opponent_unit = to_cell.has_player_unit(opponent)
             
-            print(f"Trying to move unit {unit.id} to: ({to_x},{to_y}), direction: {direction}")
-            
-            for unit_tmp in player.units:
-                unit_y, unit_x = unit_tmp.pos.y, unit_tmp.pos.x
-                
-                if unit_y == to_y and unit_x == to_x:
-                    print(f"Friendly unit at topos: {unit_tmp.id}")
-                    
-                    break
-                    
-            for unit_tmp in opponent.units:
-                unit_y, unit_x = unit_tmp.pos.y, unit_tmp.pos.x
-                
-                if unit_y == to_y and unit_x == to_x:
-                    print(f"Foe unit at topos: {unit_tmp.id}")
-                    
-                    break
-            
             if has_player_unit or has_opponent_unit:
-                print("Not possible")
                 return False
-            else:
-                print("Possible...")
+
+            for action in actions:
+                # Move action string is "m {} {}".format(self.id, dir)
+                action = action.split(" ")
+
+                if action[0] != "m":
+                    continue
+
+                _, player_unit_id, direction = action
+
+                player_unit_to_x = player_unit_to_y = None
+                for player_unit in player.units:
+                    if player_unit.id != player_unit_id:
+                        continue
+
+                    player_unit_to_x, player_unit_to_y = get_unit_future_position(player_unit, direction)
+                    break
+
+                if player_unit_to_x is None or player_unit_to_y is None:
+                    continue
+
+                if to_x == player_unit_to_x and to_y == player_unit_to_y:
+                    return False
+                    
         # Opponent citytile
         elif to_citytile.team == opponent.team:
             return False
-    #elif action == build_city:
-    elif action == 5:
+    #elif option == build_city:
+    elif option == 5:
         if not unit.can_build(game_state.map):
             return False
     else: return False
-    '''elif action == pillage:
+    '''elif option == pillage:
         to_cell = get_cell(to_x, to_y)
 
         # Not road
@@ -178,16 +185,16 @@ def is_city_tile_action_valid(city_tile, action, player):
     return True
 
 
-def get_best_unit_valid_action(unit, options, player, opponent, i=1):
+def get_best_unit_valid_action(unit, options, actions, player, opponent, i=1):
     if i == len(options):
         return -1
     
     option = np.argsort(options)[-i]
     
-    if is_unit_action_valid(unit, option, player, opponent):
+    if is_unit_action_valid(unit, option, actions, player, opponent):
         return option
     
-    return get_best_unit_valid_action(unit, options, player, opponent, i + 1)
+    return get_best_unit_valid_action(unit, options, actions, player, opponent, i + 1)
 
 
 def get_best_city_tile_valid_action(city_tile, options, player, i=1):
@@ -204,7 +211,7 @@ def get_best_city_tile_valid_action(city_tile, options, player, i=1):
 
 def get_model(s):
     input_shape = (s,s,17)
-    inputs = keras.Input(shape= input_shape,name = 'The game map')
+    inputs = keras.Input(shape= input_shape,name = 'TheGameMap')
     f = layers.Flatten()(inputs)   
     h,w,_ = get_inputs(game_state).shape
     print(h,w)
@@ -230,7 +237,7 @@ def get_prediction_actions(y_A, y_B, player, opponent):
 
         options = y_A[unit_y][unit_x] + y_B[unit_y][unit_x]
         
-        best_option = get_best_unit_valid_action(unit, options, player, opponent)
+        best_option = get_best_unit_valid_action(unit, options, actions, player, opponent)
         best_options[unit_y, unit_x] = best_option
 
         if -1 < best_option < 5:
@@ -254,6 +261,8 @@ def get_prediction_actions(y_A, y_B, player, opponent):
     
     return actions, best_options
 
+FILE_NAME_A = "model_A_12_10.h5"
+FILE_NAME_B = "model_B_12_10.h5"
 
 def agent(observation, configuration):
     global game_state, epsilon, model_A, model_B
