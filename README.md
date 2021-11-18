@@ -1,2 +1,3 @@
-# tcc-raw
-jesus thats an ugly code
+# tcc-ddqn-lux
+
+Double Deep Q-Network implementation for Lux AI Challenge.
